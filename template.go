@@ -41,10 +41,16 @@ func NewTemplate(descs []*protokit.FileDescriptor) *Template {
 		}
 
 		for _, e := range f.Enums {
+			if isDescriptorExcluded(e.GetComments().String()) {
+				continue
+			}
 			file.Enums = append(file.Enums, parseEnum(e))
 		}
 
 		for _, e := range f.Extensions {
+			if isDescriptorExcluded(e.GetComments().String()) {
+				continue
+			}
 			file.Extensions = append(file.Extensions, parseFileExtension(e))
 		}
 
@@ -53,17 +59,29 @@ func NewTemplate(descs []*protokit.FileDescriptor) *Template {
 		addFromMessage = func(m *protokit.Descriptor) {
 			file.Messages = append(file.Messages, parseMessage(m))
 			for _, e := range m.Enums {
+				if isDescriptorExcluded(e.GetComments().String()) {
+					continue
+				}
 				file.Enums = append(file.Enums, parseEnum(e))
 			}
 			for _, n := range m.Messages {
+				if isDescriptorExcluded(n.GetComments().String()) {
+					continue
+				}
 				addFromMessage(n)
 			}
 		}
 		for _, m := range f.Messages {
+			if isDescriptorExcluded(m.GetComments().String()) {
+				continue
+			}
 			addFromMessage(m)
 		}
 
 		for _, s := range f.Services {
+			if isDescriptorExcluded(s.GetComments().String()) {
+				continue
+			}
 			file.Services = append(file.Services, parseService(s))
 		}
 
@@ -403,10 +421,14 @@ func parseEnum(pe *protokit.EnumDescriptor) *Enum {
 	}
 
 	for _, val := range pe.GetValues() {
+		comment := val.GetComments().String()
+		if isDescriptorExcluded(comment) {
+			continue
+		}
 		enum.Values = append(enum.Values, &EnumValue{
 			Name:        val.GetName(),
 			Number:      fmt.Sprint(val.GetNumber()),
-			Description: description(val.GetComments().String()),
+			Description: description(comment),
 			Options:     mergeOptions(extractOptions(val.GetOptions()), extensions.Transform(val.OptionExtensions)),
 		})
 	}
@@ -452,6 +474,9 @@ func parseMessage(pm *protokit.Descriptor) *Message {
 	}
 
 	for _, f := range pm.Fields {
+		if isDescriptorExcluded(f.GetComments().String()) {
+			continue
+		}
 		msg.Fields = append(msg.Fields, parseMessageField(f))
 	}
 
@@ -505,6 +530,9 @@ func parseService(ps *protokit.ServiceDescriptor) *Service {
 	}
 
 	for _, sm := range ps.Methods {
+		if isDescriptorExcluded(sm.GetComments().String()) {
+			continue
+		}
 		service.Methods = append(service.Methods, parseServiceMethod(sm))
 	}
 
@@ -559,12 +587,19 @@ func parseType(tc typeContainer) (string, string, string) {
 }
 
 func description(comment string) string {
-	val := strings.TrimLeft(comment, "*/\n ")
+	val := strings.TrimLeft(comment, "*/ ")
+	// val = strings.ReplaceAll(val, "\n", "<br>")
 	if strings.HasPrefix(val, "@exclude") {
 		return ""
 	}
 
 	return val
+}
+
+func isDescriptorExcluded(comment string) bool {
+	comment = strings.TrimLeft(comment, "*/\n ")
+	// fmt.Fprintf(os.Stderr, "Comment: %s\n Truthness: %t",  comment, strings.HasPrefix(comment, "@exclude-descriptor"))
+	return strings.HasPrefix(comment, "@exclude-descriptor")
 }
 
 type orderedEnums []*Enum
